@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Recognizing Platform</title>
+    <style>
+        #loader {
+            border: 8px solid #f3f3f3; 
+            border-top: 8px solid #3498db; 
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 20px;
+            display: none;
+            justify-self: center;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #title_space {
+            background-color: goldenrod;
+            padding: 5px;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        #header {
+            font-weight: bolder;
+            font-family: cursive;
+            ;
+        }
+
+        #main_div {
+            display: flex;
+            height: 575px;
+
+        }
+
+        #cam_div {
+            width: 60%;
+            border : 5px solid black;
+            align-content: center;
+            text-align:center;
+
+        }
+        #extra_div{
+            width: 40%;
+            text-align: center;
+            justify-content: center;
+            padding : 25px
+        }
+        #video {
+            height: auto;
+            width: 80%;
+            margin-left: auto;
+
+        }
+        #shiftDiv{
+            text-align: center;
+            justify-content: center;
+        }
+        #capture{
+            margin: 20px;
+            height: 40px;
+            width: 80px;
+            font-size: 50 ;
+            font-weight: 700;
+            border-radius: 8px;
+            color: white;
+            background-color:gray ;
+            display: block;
+            justify-self: center;
+        }
+        #output{
+            margin: 20px;
+            font-weight: 700;
+            display: none;
+        }
+        #photo{
+            width: 90%;
+            height: auto;
+            border: 1px solid black;
+            display: none;
+            justify-self: center;
+        }
+        #photoBtns{
+            display: flex;
+            align-items:center;
+            justify-content: center;
+        }
+        #cancel{
+            display: none;
+            margin: 20px;
+            margin-right: 50px;
+            height: 40px;
+            width: 120px;
+            font-size: 50 ;
+            font-weight: 700;
+            border-radius: 8px;
+            color: white;
+            background-color:gray ;
+        }
+        #send{
+            display: none;
+            margin: 20px;
+            margin-left: 50px;
+            height: 40px;
+            width: 80px;
+            font-size: 50 ;
+            font-weight: 700;
+            border-radius: 8px;
+            color: white;
+            background-color:gray ;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://unpkg.com/ml5@0.7.1/dist/ml5.min.js"></script>
+    <script>
+        
+        let video, photo, captureBtn, cancelBtn, sendBtn, output, loader, imageDataURL;
+
+        window.onload = async function () {
+            video = document.getElementById('video');
+            photo = document.getElementById('photo');
+            captureBtn = document.getElementById('capture');
+            cancelBtn = document.getElementById("cancel");
+            sendBtn = document.getElementById('send');
+            output = document.getElementById('output');
+            loader = document.getElementById('loader');
+
+
+            if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    video.srcObject = stream;
+                } catch (error) {
+                    console.error("Camera error:", error);
+                    alert("Error accessing camera: " + error.message);
+                }
+            } else {
+                alert("getUserMedia not supported in this browser.");
+            }
+        }
+
+        function captureImage() {
+           
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            imageDataURL = canvas.toDataURL('image/png');
+            photo.src = imageDataURL;
+
+            photo.style.display = 'block';
+            cancelBtn.style.display = 'block' ;
+            sendBtn.style.display = 'block';
+
+        }
+
+        function cancel(){
+            imageDataURL = null
+
+            photo.style.display = 'none';
+            cancelBtn.style.display = 'none';
+            sendBtn.style.display = 'none';
+            output.style.display = 'none';
+            captureBtn.style.display = 'block';
+        }
+
+        function dataURLtoBlob(dataURL) {
+            const byteString = atob(dataURL.split(',')[1]);
+            const mimeString = dataURL.split(',')[0].split(':')[1].split(';')[0];
+            const ab = new ArrayBuffer(byteString.length);
+            const ia = new Uint8Array(ab);
+            for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+            }
+            return new Blob([ab], { type: mimeString });
+        }
+
+        async function getFilename(ext = "png"){
+            const date_and_time_now = new Date()
+
+            const year = date_and_time_now.getFullYear()
+            const month = date_and_time_now.getMonth() + 1
+            const day = date_and_time_now.getDate()
+            const hour = date_and_time_now.getHours()
+            const minute = date_and_time_now.getMinutes()
+            const second = date_and_time_now.getSeconds()
+
+            return String("image_"+year+"-"+month+"-"+day+"-"+hour+"-"+minute+"-"+second+"."+ext)
+
+        }
+
+        async function sendImage(){
+            if (!imageDataURL) return alert("No image to send...")
+
+            output.style.display = 'none';
+            captureBtn.style.display = "none";
+            loader.style.display = "block";
+            
+            if(! await detectObject()){
+                loader.style.display = 'none';
+                captureBtn.style.display = 'block';
+
+                alert("No object detected in the Image...")
+                return
+            }
+
+            console.log("Object detected")
+
+            const blob = dataURLtoBlob(imageDataURL);
+
+            const formData = new FormData();
+            const filename = await getFilename()
+            formData.append('file', blob, filename);
+            
+            const request_options = {
+                method: 'POST',
+                body :  formData
+            }
+            
+            await fetch("http://127.0.0.1:8000/sendImage", request_options)
+            .then(res => res.json())
+            .then(data =>{
+                console.log(data['response'])
+                //alert(data['response'])
+
+                document.getElementById('output').innerText = data['response'];
+
+                loader.style.display = 'none';
+                output.style.display = "block";
+            })
+            .catch(err =>{
+                console.log(err)
+            })
+        }
+
+        let model;
+
+        async function loadModel(){
+            console.log("Loading Model...")
+            model = await ml5.objectDetector('cocossd')
+
+            if (model){
+                console.log("Model loaded")
+            }else{
+                console.log("Model failed to load")
+            }
+        }
+        loadModel()
+
+        async function detectObject(){
+            const res = await model.detect(photo)
+            console.log("Predictions : ",res)
+            if (res.length > 0){
+                return true
+            }
+            return false
+        }
+    </script>
+</head>
+
+<body>
+    <div id="title_space">
+        <h1 id="header">Food Recognizing Platform</h1>
+    </div>
+    <div id="main_div">
+        <div id="cam_div">
+            <video id="video" autoplay="true"></video>
+        </div>
+        <div id="extra_div">
+            <div id="shiftDiv">
+                <button id="capture" onclick="captureImage()" >Capture</button>
+                <h2 id="output"></h2>
+                <div id="loader"></div>
+            </div>
+            <img id="photo" />
+            <div id="photoBtns">
+                <button id="cancel" onclick="cancel()">Cancel Image</button>
+                <button id="send" onclick="sendImage()">Recognize</button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
